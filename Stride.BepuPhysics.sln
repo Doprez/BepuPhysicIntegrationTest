@@ -21,6 +21,22 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Stride.BepuPhysics.DebugRen
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Stride.BepuPhysics._2D", "Stride.BepuPhysics._2D\Stride.BepuPhysics._2D.csproj", "{62C2181E-CCDC-4B0B-8C8E-346F2CD79E8E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotRecast.Core", "..\DotRecast\src\DotRecast.Core\DotRecast.Core.csproj", "{810110AA-EFED-4A50-B738-BEFCBC842CFD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotRecast.Detour", "..\DotRecast\src\DotRecast.Detour\DotRecast.Detour.csproj", "{D6AD2966-6486-4032-B49F-60D025E48028}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotRecast.Detour.Crowd", "..\DotRecast\src\DotRecast.Detour.Crowd\DotRecast.Detour.Crowd.csproj", "{B6AC83F5-30E0-4124-9005-45B1D1B27ADF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotRecast.Detour.Dynamic", "..\DotRecast\src\DotRecast.Detour.Dynamic\DotRecast.Detour.Dynamic.csproj", "{5B412485-5FFE-4D5B-A8E8-FAC85E40A531}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotRecast.Detour.Extras", "..\DotRecast\src\DotRecast.Detour.Extras\DotRecast.Detour.Extras.csproj", "{F2D898F2-318D-41CA-97DD-A486AC494F8C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotRecast.Detour.TileCache", "..\DotRecast\src\DotRecast.Detour.TileCache\DotRecast.Detour.TileCache.csproj", "{CDE367FA-83DB-4AAB-AC4B-8598BA1490FE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotRecast.Recast", "..\DotRecast\src\DotRecast.Recast\DotRecast.Recast.csproj", "{C77133FB-05F1-45A2-B26E-FBFD354C5C26}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DotRecast.Recast.Toolset", "..\DotRecast\src\DotRecast.Recast.Toolset\DotRecast.Recast.Toolset.csproj", "{5F174E64-A214-49C7-80A9-69361B1B10A7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

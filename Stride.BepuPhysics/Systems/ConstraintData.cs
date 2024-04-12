@@ -2,6 +2,7 @@
 using BepuPhysics;
 using BepuPhysics.Constraints;
 using Stride.BepuPhysics.Constraints;
+using Stride.BepuPhysics.Constraints.CustomConstraints;
 
 namespace Stride.BepuPhysics.Systems;
 
@@ -54,7 +55,7 @@ internal sealed class ConstraintData<T> : ConstraintDataBase where T : unmanaged
 
         Span<BodyHandle> validBodies = bodies[..count];
 
-        _cHandle = _bepuSimulation.Simulation.Solver.Add(validBodies, _constraintComponent.BepuConstraint);
+		_cHandle = _bepuSimulation.Simulation.Solver.Add(validBodies, _constraintComponent.BepuConstraint);
         _exist = true;
     }
 

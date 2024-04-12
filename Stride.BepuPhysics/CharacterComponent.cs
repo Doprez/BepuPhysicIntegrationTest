@@ -10,13 +10,15 @@ using Stride.Core.Mathematics;
 using Stride.Engine;
 using NVector3 = System.Numerics.Vector3;
 using NRigidPose = BepuPhysics.RigidPose;
+using Stride.BepuPhysics.Constraints;
 
 namespace Stride.BepuPhysics;
 
 [ComponentCategory("Bepu")]
 public class CharacterComponent : BodyComponent, ISimulationUpdate, IContactEventHandler
 {
-    private bool _tryJump;
+
+    public StaticCharacterMotionConstraintComponent MotionConstraint;
 
     /// <summary>
     /// Movement speed
@@ -26,8 +28,10 @@ public class CharacterComponent : BodyComponent, ISimulationUpdate, IContactEven
     /// Jump force
     /// </summary>
     public float JumpSpeed { get; set; } = 10f;
+	public float PeakAirTime { get; set; } = 0.5f;
+    public float FallSpeedMultiplier { get; set; } = 2.0f;
 
-    [DataMemberIgnore]
+	[DataMemberIgnore]
     public Vector3 Velocity { get; set; }
     [DataMemberIgnore]
     public bool IsGrounded { get; private set; }
@@ -38,7 +42,12 @@ public class CharacterComponent : BodyComponent, ISimulationUpdate, IContactEven
     [DataMemberIgnore]
     public List<(ContainerComponent Source, Contact Contact)> Contacts { get; } = new();
 
-    public CharacterComponent()
+	private bool _tryJump;
+	private bool _didJump;
+
+	private float _airTime;
+
+	public CharacterComponent()
     {
         InterpolationMode = InterpolationMode.Interpolated;
     }
@@ -47,12 +56,11 @@ public class CharacterComponent : BodyComponent, ISimulationUpdate, IContactEven
     {
         base.AttachInner(containerPose, shapeInertia, shapeIndex);
 
-        FrictionCoefficient = 0f;
         BodyInertia = new BodyInertia { InverseMass = 1f };
         if (Entity.Get<DebugInfo>() is null)
             Entity.Add(new DebugInfo(this));
         ContactEventHandler = this;
-    }
+	}
 
     public void Move(Vector3 direction)
     {
@@ -69,24 +77,37 @@ public class CharacterComponent : BodyComponent, ISimulationUpdate, IContactEven
 
     public void SimulationUpdate(float simTimeStep)
     {
-        Awake = true; // Keep this body active
+        Awake = true; // Keep this body active  
 
         LinearVelocity = new Vector3(Velocity.X, LinearVelocity.Y, Velocity.Z);
 
-        if (_tryJump)
+		if (_tryJump)
         {
             if (IsGrounded)
+            {
                 ApplyLinearImpulse(Vector3.UnitY * JumpSpeed);
+				_didJump = true;
+			}
             _tryJump = false;
         }
     }
+
     public void AfterSimulationUpdate(float simTimeStep)
-    {
-        CheckGrounded(); // Checking for grounded after simulation ran to compute contacts as soon as possible after they are received
+	{
+		UpdateFallSpeed(simTimeStep);
+
+		CheckGrounded(); // Checking for grounded after simulation ran to compute contacts as soon as possible after they are received
         // If there is no input from the player and we are grounded, ignore gravity to prevent sliding down the slope we might be on
         // Do not ignore if there is any input to ensure we stick to the surface as much as possible while moving down the slope
         IgnoreGlobalGravity = IsGrounded && Velocity.Length() <= 0f;
-    }
+
+		if (IsGrounded == true && !_didJump)
+		{
+			LinearVelocity = new Vector3(0, 0, 0);
+		}
+        _didJump = false;
+	}
+
     private void CheckGrounded()
     {
         IsGrounded = false;
@@ -105,6 +126,19 @@ public class CharacterComponent : BodyComponent, ISimulationUpdate, IContactEven
             }
         }
     }
+
+    private void UpdateFallSpeed(float delta)
+	{
+		_airTime += delta * FallSpeedMultiplier;
+		if (IsGrounded || _airTime <= PeakAirTime)
+		{
+			_airTime = 0;
+		}
+		else
+		{
+			LinearVelocity = new Vector3(0, -9.8f * (_airTime + 1), 0);
+		}
+	}
 
     bool IContactEventHandler.NoContactResponse => false;
 

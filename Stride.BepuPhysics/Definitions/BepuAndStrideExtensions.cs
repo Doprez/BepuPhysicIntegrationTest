@@ -1,6 +1,9 @@
 ﻿using NVector3 = System.Numerics.Vector3;
 using SVector3 = Stride.Core.Mathematics.Vector3;
 
+using NVector2 = System.Numerics.Vector2;
+using SVector2 = Stride.Core.Mathematics.Vector2;
+
 using NQuaternion = System.Numerics.Quaternion;
 using SQuaternion = Stride.Core.Mathematics.Quaternion;
 
@@ -41,9 +44,18 @@ internal static class BepuAndStrideExtensions
     public static SVector3 ToStrideVector(this NVector3 vec)
     {
         return Unsafe.As<NVector3, SVector3>(ref vec);
-    }
+	}
 
-    public static NQuaternion ToNumericQuaternion(this SQuaternion qua)
+	public static NVector2 ToNumericVector(this SVector2 vec)
+	{
+		return Unsafe.As<SVector2, NVector2>(ref vec);
+	}
+	public static SVector2 ToStrideVector(this NVector2 vec)
+	{
+		return Unsafe.As<NVector2, SVector2>(ref vec);
+	}
+
+	public static NQuaternion ToNumericQuaternion(this SQuaternion qua)
     {
         return Unsafe.As<SQuaternion, NQuaternion>(ref qua);
     }

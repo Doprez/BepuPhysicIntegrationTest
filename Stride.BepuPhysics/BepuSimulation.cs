@@ -10,7 +10,7 @@ using Stride.Core.Mathematics;
 using Stride.Core.Threading;
 using Stride.Core;
 using System.Diagnostics;
-
+using Stride.Engine;
 using SRigidPose = Stride.BepuPhysics.Definitions.RigidPose;
 using SBodyVelocity = Stride.BepuPhysics.Definitions.BodyVelocity;
 
@@ -265,21 +265,48 @@ public class BepuSimulation
 
         result = default;
         return false;
-    }
+	}
 
-    /// <summary>
-    /// Collect intersections between the given ray and shapes in this simulation. Hits are NOT sorted.
-    /// </summary>
-    /// <param name="origin">The start position for this ray</param>
-    /// <param name="dir">The normalized direction the ray is facing</param>
-    /// <param name="maxDistance">The maximum from the origin that hits will be collected</param>
-    /// <param name="buffer">
-    /// The collection used to store hits into,
-    /// feel free to rent it from <see cref="System.Buffers.ArrayPool{T}"/> and return it after you processed <paramref name="hits"/>
-    /// </param>
-    /// <param name="hits">Intersections are pushed to <see cref="buffer"/>, this is the subset of <paramref name="buffer"/> that contains valid/assigned values</param>
-    /// <param name="collisionMask"></param>
-    public void RaycastPenetrating(in Vector3 origin, in Vector3 dir, float maxDistance, HitInfo[] buffer, out Span<HitInfo> hits, CollisionMask collisionMask = CollisionMask.Everything)
+	/// <summary>
+	/// Finds the closest intersection between this ray and shapes in the simulation.
+	/// </summary>
+	/// <param name="origin">The start position for this ray</param>
+	/// <param name="end">The end position for this ray</param>
+	/// <param name="maxDistance">The maximum from the origin that hits will be collected</param>
+	/// <param name="result">An intersection in the world when this method returns true, an undefined value when this method returns false</param>
+	/// <param name="collisionMask"></param>
+	/// <returns>True when the given ray intersects with a shape, false otherwise</returns>
+	[Obsolete("Use RayCast instead, this doesnt work")]
+	public bool LineCast(in Vector3 origin, in Vector3 end, float maxDistance, out HitInfo result, CollisionMask collisionMask = CollisionMask.Everything)
+	{
+		var handler = new RayClosestHitHandler(this, collisionMask);
+
+        // TODO: get the direction from origin to end
+
+		Simulation.RayCast(origin.ToNumericVector(), end.ToNumericVector(), maxDistance, ref handler);
+		if (handler.HitInformation.HasValue)
+		{
+			result = handler.HitInformation.Value;
+			return true;
+		}
+
+		result = default;
+		return false;
+	}
+
+	/// <summary>
+	/// Collect intersections between the given ray and shapes in this simulation. Hits are NOT sorted.
+	/// </summary>
+	/// <param name="origin">The start position for this ray</param>
+	/// <param name="dir">The normalized direction the ray is facing</param>
+	/// <param name="maxDistance">The maximum from the origin that hits will be collected</param>
+	/// <param name="buffer">
+	/// The collection used to store hits into,
+	/// feel free to rent it from <see cref="System.Buffers.ArrayPool{T}"/> and return it after you processed <paramref name="hits"/>
+	/// </param>
+	/// <param name="hits">Intersections are pushed to <see cref="buffer"/>, this is the subset of <paramref name="buffer"/> that contains valid/assigned values</param>
+	/// <param name="collisionMask"></param>
+	public void RaycastPenetrating(in Vector3 origin, in Vector3 dir, float maxDistance, HitInfo[] buffer, out Span<HitInfo> hits, CollisionMask collisionMask = CollisionMask.Everything)
     {
         var handler = new RayHitsArrayHandler(this, buffer, collisionMask);
         Simulation.RayCast(origin.ToNumericVector(), dir.ToNumericVector(), maxDistance, ref handler);
@@ -511,7 +538,7 @@ public class BepuSimulation
                     SyncTransformsWithPhysics(bRef, bepuSim);
                     // This can be slower than expected when we have multiple containers as parents recursively since we would recompute the topmost container n times, the second topmost n-1 etc.
                     // It's not that likely but should still be documented as suboptimal somewhere
-                    containerParent.Entity.Transform.Parent.UpdateWorldMatrix();
+                    containerParent.Entity.Transform.Parent?.UpdateWorldMatrix();
                 }
             }
 

@@ -72,6 +72,8 @@ public class ContainerProcessor : EntityProcessor<ContainerComponent>
 
         if (component is ISimulationUpdate simulationUpdate)
             targetSimulation.Register(simulationUpdate);
+
+        component.Services = Services;
     }
 
     protected override void OnEntityComponentRemoved(Entity entity, [NotNull] ContainerComponent component, [NotNull] ContainerComponent data)

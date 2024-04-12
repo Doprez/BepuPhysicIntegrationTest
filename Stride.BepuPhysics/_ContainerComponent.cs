@@ -32,6 +32,8 @@ public abstract class ContainerComponent : EntityComponent
 
     [DataMemberIgnore]
     public BepuSimulation? Simulation { get; private set; }
+    [DataMemberIgnore]
+    public IServiceRegistry Services { get; set; }
 
     [DataMemberIgnore]
     internal ContainerProcessor? Processor { get; set; }
