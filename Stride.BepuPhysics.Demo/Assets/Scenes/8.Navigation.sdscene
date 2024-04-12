@@ -13,6 +13,7 @@ Hierarchy:
         - ref!! 74ad0481-11b5-452c-a193-8e34d677bcda
         - ref!! c352c501-36ae-4812-8f56-51b5abe2ab25
         - ref!! 7d6efaec-e0e1-4ba3-a0ac-68711a1c2c68
+        - ref!! 47737f3f-4ec3-46f1-b27f-bd5b72d66d9f
     Parts:
         -   Entity:
                 Id: 2e7d0005-01e8-4c1a-9c08-edcdc9851193
@@ -105,6 +106,19 @@ Hierarchy:
                             XAxis: 0
                             YAxis: 0
                             ZAxis: 0
+        -   Entity:
+                Id: 47737f3f-4ec3-46f1-b27f-bd5b72d66d9f
+                Name: Entity
+                Components:
+                    9fdba25fe68f2d5dd15a6331762f4e53: !TransformComponent
+                        Id: b0c18234-b64b-4e87-80c6-723ac81a297a
+                        Position: {X: -20.005182, Y: 2.8123674, Z: 27.869894}
+                        Rotation: {X: 0.0, Y: 0.0, Z: 0.0, W: 1.0}
+                        Scale: {X: 1.0, Y: 1.0, Z: 1.0}
+                        Children: {}
+                    570916bbec5ca099f3bb50d5e60427ce: !RecastNavigationComponent
+                        Id: 67c860d3-d487-43f9-8c54-7df506a8e788
+                        Speed: 5.0
         -   Entity:
                 Id: 644ed304-94db-494a-9a6f-e584604da464
                 Name: Floor

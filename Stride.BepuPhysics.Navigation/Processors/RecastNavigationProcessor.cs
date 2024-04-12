@@ -1,26 +1,18 @@
-﻿using DotRecast.Core.Numerics;
-using DotRecast.Detour;
-using Stride.BepuPhysics.Definitions;
+﻿using Stride.BepuPhysics.Definitions;
 using Stride.BepuPhysics.Navigation.Components;
-using Stride.BepuPhysics.Navigation.Extensions;
 using Stride.Core;
 using Stride.Core.Mathematics;
 using Stride.Core.Threading;
 using Stride.Engine;
 using Stride.Games;
-using Stride.Navigation;
-using Stride.Profiling;
-using System.Diagnostics;
-using System.Xml.Linq;
+using System.Collections.Concurrent;
 
 namespace Stride.BepuPhysics.Navigation.Processors;
 public class RecastNavigationProcessor : EntityProcessor<RecastNavigationComponent>
 {
 	private RecastMeshProcessor? _recastMeshProcessor;
 	private List<RecastNavigationComponent> _components = new();
-
-	private Stopwatch _stopwatch = new();
-	private DebugTextSystem _debugTextSystem;
+	public readonly ConcurrentQueue<RecastNavigationComponent> TryGetPathQueue = new();
 
 	public RecastNavigationProcessor()
 	{
@@ -40,15 +32,14 @@ public class RecastNavigationProcessor : EntityProcessor<RecastNavigationCompone
 			var sceneSystem = Services.GetSafeServiceAs<SceneSystem>();
 			sceneSystem.Game.GameSystems.Add(_recastMeshProcessor);
 		}
-		_debugTextSystem = Services.GetService<DebugTextSystem>();
 	}
 
-	override protected void OnEntityComponentAdding(Entity entity, RecastNavigationComponent component, RecastNavigationComponent data)
+	protected override void OnEntityComponentAdding(Entity entity, RecastNavigationComponent component, RecastNavigationComponent data)
 	{
 		_components.Add(component);
 	}
 
-	override protected void OnEntityComponentRemoved(Entity entity, RecastNavigationComponent component, RecastNavigationComponent data)
+	protected override void OnEntityComponentRemoved(Entity entity, RecastNavigationComponent component, RecastNavigationComponent data)
 	{
 		_components.Remove(component);
 	}
@@ -57,53 +48,37 @@ public class RecastNavigationProcessor : EntityProcessor<RecastNavigationCompone
 	{
 		var deltaTime = (float)time.Elapsed.TotalSeconds;
 
-		//_stopwatch.Start();
-
-		for (int i = 0; i < _components.Count; i++)
+		Dispatcher.For(0, 10, i =>
 		{
-			if (_components[i].SetNewPath)
+			if (TryGetPathQueue.IsEmpty) return;
+			
+			if (TryGetPathQueue.TryDequeue(out var pathfinding))
 			{
 				// cannot use dispatcher here because of the TryFindPath method.
-				SetNewPath(_components[i]);
+				SetNewPath(pathfinding);
 			}
-		}
-
-		//_stopwatch.Stop();
-		//_debugTextSystem.Print("PathfindingProcessor.SetNewPath: " + _stopwatch.Elapsed.TotalMilliseconds, new Int2(100, 100));
-		//
-		//_stopwatch.Reset();
-		//_stopwatch.Start();
+		});
 
 		Dispatcher.For(0, _components.Count, i =>
 		{
-			//if (_components[i].SetNewPath)
-			//{
-			//	// cannot use dispatcher here because of the TryFindPath method.
-			//	SetNewPath(_components[i]);
-			//}
 			if (_components[i].ShouldMove)
 			{
 				Move(_components[i], deltaTime);
 				Rotate(_components[i]);
-				FindRandomPoint(_components[i]);
+			}
+
+			if (_components[i].SetNewPath && !_components[i].InSetPathQueue)
+			{
+				TryGetPathQueue.Enqueue(_components[i]);
+				_components[i].InSetPathQueue = true;
+				_components[i].SetNewPath = false;
 			}
 		});
-
-		//_stopwatch.Stop();
-		//_debugTextSystem.Print("PathfindingProcessor.Move: " + _stopwatch.Elapsed.TotalMilliseconds, new Int2(100, 120));
-
-		//Dispatcher.For(0, _components.Count, i =>
-		//{
-		//	if (_components[i].ShouldMove)
-		//	{
-		//		FindRandomPoint(_components[i]);
-		//	}
-		//});
-
 	}
 
 	private void SetNewPath(RecastNavigationComponent pathfinder)
 	{
+		pathfinder.InSetPathQueue = false;
 		if (_recastMeshProcessor.TryFindPath(pathfinder.Entity.Transform.WorldMatrix.TranslationVector, pathfinder.Target, ref pathfinder.Polys, ref pathfinder.Path))
 		{
 			pathfinder.SetNewPath = false;
@@ -157,16 +132,4 @@ public class RecastNavigationProcessor : EntityProcessor<RecastNavigationCompone
 
 		pathfinder.Entity.Transform.Rotation = Quaternion.RotationY(-angle);
 	}
-
-	private void FindRandomPoint(RecastNavigationComponent pathfinder)
-	{
-		if (Vector3.Distance(pathfinder.Entity.Transform.WorldMatrix.TranslationVector, pathfinder.Target) < 1)
-		{
-			pathfinder.Target.Z = Random.Shared.Next(-200, 200);
-			pathfinder.Target.X = Random.Shared.Next(-200, 200);
-			pathfinder.SetNewPath = true;
-			pathfinder.ShouldMove = true;
-		}
-	}
-
 }

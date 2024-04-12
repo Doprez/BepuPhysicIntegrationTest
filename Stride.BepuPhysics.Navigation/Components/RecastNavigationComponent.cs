@@ -23,6 +23,8 @@ public class RecastNavigationComponent : EntityComponent
 	public bool ShouldMove { get; set; } = true;
 	[DataMemberIgnore]
 	public bool SetNewPath { get; set; } = true;
+	[DataMemberIgnore]
+	public bool InSetPathQueue { get; set; }
 
 	/// <summary>
 	/// The target position for the agent to move to. will trigger IsDirty to be set to true.

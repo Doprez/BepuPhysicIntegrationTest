@@ -10,10 +10,6 @@ using Stride.Core.Annotations;
 using Stride.Engine;
 using Stride.Games;
 using Stride.Input;
-using Stride.Rendering;
-using Stride.Graphics;
-using Stride.Rendering.Materials.ComputeColors;
-using Stride.Rendering.Materials;
 using Stride.Core.Mathematics;
 using Stride.BepuPhysics.Systems;
 using Stride.Core;
@@ -32,7 +28,7 @@ public class RecastMeshProcessor : GameSystemBase
 
 	private readonly RcVec3f polyPickExt = new RcVec3f(2, 4, 2);
 
-	private Stopwatch _stopwatch = new();
+	private readonly Stopwatch _stopwatch = new();
 
     private IGame _game;
     private SceneSystem _sceneSystem;
@@ -71,6 +67,11 @@ public class RecastMeshProcessor : GameSystemBase
             _navMesh = _runningRebuild.Result;
             _runningRebuild = null;
         }
+
+        if(_input.IsKeyPressed(Keys.Space))
+        {
+			RebuildNavMesh();
+		}
     }
 
     public Task RebuildNavMesh()
@@ -299,6 +300,31 @@ public class RecastMeshProcessor : GameSystemBase
         return result.Succeeded();
 	}
 
+	public List<Vector3> GetNavMeshTiles()
+	{ 
+		if(_navMesh is null) return null;
+
+        List<Vector3> verts = new();
+
+		for (int i = 0; i < _navMesh.GetMaxTiles(); i++)
+		{
+            var tile = _navMesh.GetTile(i);
+            if (tile != null && tile.data != null)
+            {
+	            for (int j = 0; j < tile.data.verts.Length; j += 3)
+	            {
+		            var point = new Vector3(
+			            tile.data.verts[j],
+			            tile.data.verts[j + 1],
+			            tile.data.verts[j + 2]);
+                    verts.Add(point);
+	            }
+            }
+		}
+
+        return verts;
+	}
+
 	public DtStatus FindFollowPath(DtNavMesh navMesh, DtNavMeshQuery navQuery, long startRef, long endRef, RcVec3f startPt, RcVec3f endPt, IDtQueryFilter filter, bool enableRaycast, ref List<long> polys, ref List<Vector3> smoothPath)
 	{
 		if (startRef == 0 || endRef == 0)
@@ -379,56 +405,56 @@ public class RecastMeshProcessor : GameSystemBase
 			}
 
 			// Handle end of path and off-mesh links when close enough.
-			if (endOfPath && DtPathUtils.InRange(iterPos, steerPos, SLOP, 1.0f))
-			{
-				// Reached end of path.
-				iterPos = targetPos;
-				if (smoothPath.Count < MaxSmooth)
-				{
-					smoothPath.Add(iterPos.ToStrideVector());
-				}
-
-				break;
-			}
-			else if (offMeshConnection && DtPathUtils.InRange(iterPos, steerPos, SLOP, 1.0f))
-			{
-				// Reached off-mesh connection.
-				RcVec3f startPos = RcVec3f.Zero;
-				RcVec3f endPos = RcVec3f.Zero;
-
-				// Advance the path up to and over the off-mesh connection.
-				long prevRef = 0;
-				long polyRef = polys[0];
-				int npos = 0;
-				while (npos < polys.Count && polyRef != steerPosRef)
-				{
-					prevRef = polyRef;
-					polyRef = polys[npos];
-					npos++;
-				}
-
-				polys = polys.GetRange(npos, polys.Count - npos);
-
-				// Handle the connection.
-				var status2 = navMesh.GetOffMeshConnectionPolyEndPoints(prevRef, polyRef, ref startPos, ref endPos);
-				if (status2.Succeeded())
-				{
-					if (smoothPath.Count < MaxSmooth)
-					{
-						smoothPath.Add(startPos.ToStrideVector());
-						// Hack to make the dotted path not visible during off-mesh connection.
-						if ((smoothPath.Count & 1) != 0)
-						{
-							smoothPath.Add(startPos.ToStrideVector());
-						}
-					}
-
-					// Move position at the other side of the off-mesh link.
-					iterPos = endPos;
-					navQuery.GetPolyHeight(polys[0], iterPos, out var eh);
-					iterPos.Y = eh;
-				}
-			}
+			//if (endOfPath && DtPathUtils.InRange(iterPos, steerPos, SLOP, 1.0f))
+			//{
+			//	// Reached end of path.
+			//	iterPos = targetPos;
+			//	if (smoothPath.Count < MaxSmooth)
+			//	{
+			//		smoothPath.Add(iterPos.ToStrideVector());
+			//	}
+            //
+			//	break;
+			//}
+			//else if (offMeshConnection && DtPathUtils.InRange(iterPos, steerPos, SLOP, 1.0f))
+			//{
+			//	// Reached off-mesh connection.
+			//	RcVec3f startPos = RcVec3f.Zero;
+			//	RcVec3f endPos = RcVec3f.Zero;
+            //
+			//	// Advance the path up to and over the off-mesh connection.
+			//	long prevRef = 0;
+			//	long polyRef = polys[0];
+			//	int npos = 0;
+			//	while (npos < polys.Count && polyRef != steerPosRef)
+			//	{
+			//		prevRef = polyRef;
+			//		polyRef = polys[npos];
+			//		npos++;
+			//	}
+            //
+			//	polys = polys.GetRange(npos, polys.Count - npos);
+            //
+			//	// Handle the connection.
+			//	var status2 = navMesh.GetOffMeshConnectionPolyEndPoints(prevRef, polyRef, ref startPos, ref endPos);
+			//	if (status2.Succeeded())
+			//	{
+			//		if (smoothPath.Count < MaxSmooth)
+			//		{
+			//			smoothPath.Add(startPos.ToStrideVector());
+			//			// Hack to make the dotted path not visible during off-mesh connection.
+			//			if ((smoothPath.Count & 1) != 0)
+			//			{
+			//				smoothPath.Add(startPos.ToStrideVector());
+			//			}
+			//		}
+            //
+			//		// Move position at the other side of the off-mesh link.
+			//		iterPos = endPos;
+			//		navQuery.GetPolyHeight(polys[0], iterPos, out var eh);
+			//		iterPos.Y = eh;
+			//	}
+			//}
 
 			// Store results.
 			if (smoothPath.Count < MaxSmooth)
