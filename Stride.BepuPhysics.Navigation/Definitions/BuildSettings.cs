@@ -19,12 +19,24 @@ public class BuildSettings
 
 	public float agentMaxAcceleration = 8f;
 
-	public float agentMaxSpeed = 3.5f;
+	//public float agentMaxSpeed = 3.5f;
 
 	public int minRegionSize = 8;
 
 	public int mergedRegionSize = 20;
 
+	public RcPartition PartitionType
+	{ 
+		get
+		{
+			return RcPartitionType.OfValue(partitioning);
+		}
+		set
+		{
+			partitioning = (int)value;
+		}
+	}
+	[DataMemberIgnore]
 	public int partitioning = RcPartitionType.WATERSHED.Value;
 
 	public bool filterLowHangingObstacles = true;

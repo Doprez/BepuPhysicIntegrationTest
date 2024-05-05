@@ -16,6 +16,9 @@ using Stride.Core;
 using System.Diagnostics;
 using DotRecast.Core.Numerics;
 using Stride.BepuPhysics.Navigation.Extensions;
+using DotRecast.Core.Collections;
+using Stride.BepuPhysics.Navigation.Definitions;
+using Stride.Engine.Design;
 
 namespace Stride.BepuPhysics.Navigation.Processors;
 public class RecastMeshProcessor : GameSystemBase
@@ -26,21 +29,21 @@ public class RecastMeshProcessor : GameSystemBase
 	public const int MaxPolys = 256;
 	public const int MaxSmooth = 2048;
 
-	private readonly RcVec3f polyPickExt = new RcVec3f(2, 4, 2);
+	private readonly RcVec3f polyPickExt = new(2, 4, 2);
 
 	private readonly Stopwatch _stopwatch = new();
+    private readonly SceneSystem _sceneSystem;
+    private readonly InputManager _input;
+    private readonly ShapeCacheSystem _shapeCache;
+	private ContainerProcessor _containerProcessor;
 
-    private IGame _game;
-    private SceneSystem _sceneSystem;
-    private InputManager _input;
-    private ContainerProcessor _containerProcessor;
-    private ShapeCacheSystem _shapeCache;
-
-    private DtNavMesh? _navMesh;
+	private DtNavMesh? _navMesh;
     private Task<DtNavMesh>? _runningRebuild;
 
     private CancellationTokenSource _rebuildingTask = new();
-    private RcNavMeshBuildSettings _navSettings = new();
+    private RecastNavigationConfiguration _navSettings = new();
+
+	private DtNavMeshQuery _dtNavMeshQuery;
 
 	public RecastMeshProcessor([NotNull] IServiceRegistry registry) : base(registry)
 	{
@@ -49,18 +52,18 @@ public class RecastMeshProcessor : GameSystemBase
 
 		registry.AddService(this);
 
-		_game = registry.GetService<IGame>();
 		_sceneSystem = registry.GetService<SceneSystem>();
 		_input = registry.GetService<InputManager>();
 		_shapeCache = registry.GetService<ShapeCacheSystem>();
+
+		var gameSettings = registry.GetService<IGameSettingsService>();
+		_navSettings = gameSettings.Settings.Configurations.Get<RecastNavigationConfiguration>();
+        _navSettings ??= new();
 	}
 
     public override void Update(GameTime time)
     {
-        if(_containerProcessor is null)
-		{
-			_containerProcessor = _sceneSystem.SceneInstance.Processors.Get<ContainerProcessor>();
-		}
+        _containerProcessor ??= _sceneSystem.SceneInstance.Processors.Get<ContainerProcessor>();
 
         if (_runningRebuild?.Status == TaskStatus.RanToCompletion)
         {
@@ -111,35 +114,35 @@ public class RecastMeshProcessor : GameSystemBase
 
 		var settingsCopy = new RcNavMeshBuildSettings
         {
-            cellSize = _navSettings.cellSize,
-            cellHeight = _navSettings.cellHeight,
-            agentHeight = _navSettings.agentHeight,
-            agentRadius = _navSettings.agentRadius,
-            agentMaxClimb = _navSettings.agentMaxClimb,
-            agentMaxSlope = _navSettings.agentMaxSlope,
-            agentMaxAcceleration = _navSettings.agentMaxAcceleration,
-            agentMaxSpeed = _navSettings.agentMaxSpeed,
-            minRegionSize = _navSettings.minRegionSize,
-            mergedRegionSize = _navSettings.mergedRegionSize,
-            partitioning = _navSettings.partitioning,
-            filterLowHangingObstacles = _navSettings.filterLowHangingObstacles,
-            filterLedgeSpans = _navSettings.filterLedgeSpans,
-            filterWalkableLowHeightSpans = _navSettings.filterWalkableLowHeightSpans,
-            edgeMaxLen = _navSettings.edgeMaxLen,
-            edgeMaxError = _navSettings.edgeMaxError,
-            vertsPerPoly = _navSettings.vertsPerPoly,
-            detailSampleDist = _navSettings.detailSampleDist,
-            detailSampleMaxError = _navSettings.detailSampleMaxError,
-            tiled = _navSettings.tiled,
-            tileSize = _navSettings.tileSize,
+            cellSize = _navSettings.BuildSettings.cellSize,
+            cellHeight = _navSettings.BuildSettings.cellHeight,
+            agentHeight = _navSettings.BuildSettings.agentHeight,
+            agentRadius = _navSettings.BuildSettings.agentRadius,
+            agentMaxClimb = _navSettings.BuildSettings.agentMaxClimb,
+            agentMaxSlope = _navSettings.BuildSettings.agentMaxSlope,
+            agentMaxAcceleration = _navSettings.BuildSettings.agentMaxAcceleration,
+            //agentMaxSpeed = _navSettings.BuildSettings.agentMaxSpeed,
+            minRegionSize = _navSettings.BuildSettings.minRegionSize,
+            mergedRegionSize = _navSettings.BuildSettings.mergedRegionSize,
+            partitioning = _navSettings.BuildSettings.partitioning,
+            filterLowHangingObstacles = _navSettings.BuildSettings.filterLowHangingObstacles,
+            filterLedgeSpans = _navSettings.BuildSettings.filterLedgeSpans,
+            filterWalkableLowHeightSpans = _navSettings.BuildSettings.filterWalkableLowHeightSpans,
+            edgeMaxLen = _navSettings.BuildSettings.edgeMaxLen,
+            edgeMaxError = _navSettings.BuildSettings.edgeMaxError,
+            vertsPerPoly = _navSettings.BuildSettings.vertsPerPoly,
+            detailSampleDist = _navSettings.BuildSettings.detailSampleDist,
+            detailSampleMaxError = _navSettings.BuildSettings.detailSampleMaxError,
+            tiled = _navSettings.BuildSettings.tiled,
+            tileSize = _navSettings.BuildSettings.tileSize,
         };
         var token = _rebuildingTask.Token;
-		var task = Task.Run(() => _navMesh = CreateNavMesh(settingsCopy, asyncInput, token), token);
+		var task = Task.Run(() => _navMesh = CreateNavMesh(settingsCopy, asyncInput, _navSettings.UsableThreadCount, token), token);
         _runningRebuild = task;
         return task;
     }
 
-    private static DtNavMesh CreateNavMesh(RcNavMeshBuildSettings _navSettings, AsyncInput input, CancellationToken cancelToken)
+    private static DtNavMesh CreateNavMesh(RcNavMeshBuildSettings _navSettings, AsyncInput input, int threads, CancellationToken cancelToken)
     {
         // /!\ THIS IS NOT RUNNING ON THE MAIN THREAD /!\
 
@@ -164,14 +167,14 @@ public class RecastMeshProcessor : GameSystemBase
                 int vertexBufferStart = verts.Count;
 
                 for (int i = 0; i < shape.Indices.Length; i += 3)
-                {
-                    var index0 = shape.Indices[i];
-                    var index1 = shape.Indices[i+1];
-                    var index2 = shape.Indices[i+2];
-                    indices.Add(vertexBufferStart + index0);
-                    indices.Add(vertexBufferStart + index2);
-                    indices.Add(vertexBufferStart + index1);
-                }
+				{
+					var index0 = shape.Indices[i];
+					var index1 = shape.Indices[i + 1];
+					var index2 = shape.Indices[i + 2];
+					indices.Add(vertexBufferStart + index0);
+					indices.Add(vertexBufferStart + index2);
+					indices.Add(vertexBufferStart + index1);
+				}
 
                 //foreach (int index in shape.Indices)
                 //    indices.Add(vertexBufferStart + index);
@@ -190,12 +193,12 @@ public class RecastMeshProcessor : GameSystemBase
         var spanToPoints = CollectionsMarshal.AsSpan(verts);
         // cast the type of span to read it as if it was a series of contiguous floats instead of contiguous vectors
         var reinterpretedPoints = MemoryMarshal.Cast<VertexPosition3, float>(spanToPoints);
-        StrideGeomProvider geom = new StrideGeomProvider(reinterpretedPoints.ToArray(), indices.ToArray());
+        StrideGeomProvider geom = new(reinterpretedPoints.ToArray(), [.. indices]);
 
         cancelToken.ThrowIfCancellationRequested();
 
         RcPartition partitionType = RcPartitionType.OfValue(_navSettings.partitioning);
-        RcConfig cfg = new RcConfig(
+        RcConfig cfg = new(
             useTiles: true,
             _navSettings.tileSize,
             _navSettings.tileSize,
@@ -222,12 +225,12 @@ public class RecastMeshProcessor : GameSystemBase
 
         cancelToken.ThrowIfCancellationRequested();
 
-        List<DtMeshData> dtMeshes = new();
-        foreach (RcBuilderResult result in new RcBuilder().BuildTiles(geom, cfg, Task.Factory))
+        List<DtMeshData> dtMeshes = [];
+        foreach (RcBuilderResult result in new RcBuilder().BuildTiles(geom, cfg, true, false, threads, cancellation: cancelToken))
         {
             DtNavMeshCreateParams navMeshCreateParams = DemoNavMeshBuilder.GetNavMeshCreateParams(geom, _navSettings.cellSize, _navSettings.cellHeight, _navSettings.agentHeight, _navSettings.agentRadius, _navSettings.agentMaxClimb, result);
-            navMeshCreateParams.tileX = result.tileX;
-            navMeshCreateParams.tileZ = result.tileZ;
+            navMeshCreateParams.tileX = result.TileX;
+            navMeshCreateParams.tileZ = result.TileZ;
             DtMeshData dtMeshData = DtNavMeshBuilder.CreateNavMeshData(navMeshCreateParams);
             if (dtMeshData != null)
             {
@@ -245,7 +248,7 @@ public class RecastMeshProcessor : GameSystemBase
         option.tileHeight = _navSettings.tileSize * _navSettings.cellSize;
         option.maxTiles = GetMaxTiles(geom, _navSettings.cellSize, _navSettings.tileSize);
         option.maxPolys = GetMaxPolysPerTile(geom, _navSettings.cellSize, _navSettings.tileSize);
-        DtNavMesh navMesh = new DtNavMesh(option, _navSettings.vertsPerPoly);
+        DtNavMesh navMesh = new(option, _navSettings.vertsPerPoly);
         foreach (DtMeshData dtMeshData1 in dtMeshes)
         {
             navMesh.AddTile(dtMeshData1, 0, 0L);
@@ -276,35 +279,27 @@ public class RecastMeshProcessor : GameSystemBase
         return Math.Min(DtUtils.Ilog2(DtUtils.NextPow2(num * num2)), 14);
     }
 
-    private static int[] GetTiles(DemoInputGeomProvider geom, float cellSize, int tileSize)
-    {
-        RcCommons.CalcGridSize(geom.GetMeshBoundsMin(), geom.GetMeshBoundsMax(), cellSize, out var sizeX, out var sizeZ);
-        int num = (sizeX + tileSize - 1) / tileSize;
-        int num2 = (sizeZ + tileSize - 1) / tileSize;
-        return [num, num2];
-    }
-
 	public bool TryFindPath(Vector3 start, Vector3 end, ref List<long> polys, ref List<Vector3> smoothPath)
 	{
         if(_navMesh is null) return false;
 
 		var queryFilter = new DtQueryDefaultFilter();
-		DtNavMeshQuery query = new DtNavMeshQuery(_navMesh);
+		_dtNavMeshQuery = new DtNavMeshQuery(_navMesh);
 
-		query.FindNearestPoly(start.ToDotRecastVector(), polyPickExt, queryFilter, out var startRef, out var _, out var _);
+		_dtNavMeshQuery.FindNearestPoly(start.ToDotRecastVector(), polyPickExt, queryFilter, out var startRef, out var _, out var _);
 
-		query.FindNearestPoly(end.ToDotRecastVector(), polyPickExt, queryFilter, out var endRef, out var _, out var _);
+		_dtNavMeshQuery.FindNearestPoly(end.ToDotRecastVector(), polyPickExt, queryFilter, out var endRef, out var _, out var _);
 		// find the nearest point on the navmesh to the start and end points
-		var result = FindFollowPath(_navMesh, query, startRef, endRef, start.ToDotRecastVector(), end.ToDotRecastVector(), queryFilter, true, ref polys, ref smoothPath);
+		var result = FindFollowPath(_dtNavMeshQuery, startRef, endRef, start.ToDotRecastVector(), end.ToDotRecastVector(), queryFilter, true, ref polys, ref smoothPath);
 
         return result.Succeeded();
 	}
 
-	public List<Vector3> GetNavMeshTiles()
+	public List<Vector3>? GetNavMeshTiles()
 	{ 
 		if(_navMesh is null) return null;
 
-        List<Vector3> verts = new();
+        List<Vector3> verts = [];
 
 		for (int i = 0; i < _navMesh.GetMaxTiles(); i++)
 		{
@@ -325,7 +320,7 @@ public class RecastMeshProcessor : GameSystemBase
         return verts;
 	}
 
-	public DtStatus FindFollowPath(DtNavMesh navMesh, DtNavMeshQuery navQuery, long startRef, long endRef, RcVec3f startPt, RcVec3f endPt, IDtQueryFilter filter, bool enableRaycast, ref List<long> polys, ref List<Vector3> smoothPath)
+	public static DtStatus FindFollowPath(DtNavMeshQuery navQuery, long startRef, long endRef, RcVec3f startPt, RcVec3f endPt, IDtQueryFilter filter, bool enableRaycast, ref List<long> polys, ref List<Vector3> smoothPath)
 	{
 		if (startRef == 0 || endRef == 0)
 		{
@@ -335,8 +330,8 @@ public class RecastMeshProcessor : GameSystemBase
 			return DtStatus.DT_FAILURE;
 		}
 
-		polys ??= new List<long>();
-		smoothPath ??= new List<Vector3>();
+		polys ??= [];
+		smoothPath ??= [];
 
 		polys.Clear();
 		smoothPath.Clear();
@@ -347,8 +342,8 @@ public class RecastMeshProcessor : GameSystemBase
 			return DtStatus.DT_FAILURE;
 
 		// Iterate over the path to find smooth path on the detail mesh surface.
-		navQuery.ClosestPointOnPoly(startRef, startPt, out var iterPos, out var _);
-		navQuery.ClosestPointOnPoly(polys[polys.Count - 1], endPt, out var targetPos, out var _);
+		navQuery.ClosestPointOnPoly(startRef, startPt, out var iterPos, out _);
+		navQuery.ClosestPointOnPoly(polys[polys.Count - 1], endPt, out var targetPos, out _);
 
 		float STEP_SIZE = 0.5f;
 		float SLOP = 0.01f;
@@ -363,17 +358,13 @@ public class RecastMeshProcessor : GameSystemBase
 		{
 			// Find location to steer towards.
 			if (!DtPathUtils.GetSteerTarget(navQuery, iterPos, targetPos, SLOP,
-					polys, out var steerPos, out var steerPosFlag, out var steerPosRef))
+					polys, out var steerPos, out var steerPosFlag, out _))
 			{
 				break;
 			}
 
-			bool endOfPath = (steerPosFlag & DtStraightPathFlags.DT_STRAIGHTPATH_END) != 0
-				? true
-				: false;
-			bool offMeshConnection = (steerPosFlag & DtStraightPathFlags.DT_STRAIGHTPATH_OFFMESH_CONNECTION) != 0
-				? true
-				: false;
+			bool endOfPath = (steerPosFlag & DtStraightPathFlags.DT_STRAIGHTPATH_END) != 0;
+			bool offMeshConnection = (steerPosFlag & DtStraightPathFlags.DT_STRAIGHTPATH_OFFMESH_CONNECTION) != 0;
 
 			// Find movement delta.
 			RcVec3f delta = RcVec3f.Subtract(steerPos, iterPos);
@@ -395,7 +386,7 @@ public class RecastMeshProcessor : GameSystemBase
 
 			iterPos = result;
 
-			polys = DtPathUtils.MergeCorridorStartMoved(polys, visited);
+			polys = DtPathUtils.MergeCorridorStartMoved(polys, 0, 256, visited);
 			polys = DtPathUtils.FixupShortcuts(polys, navQuery);
 
 			var status = navQuery.GetPolyHeight(polys[0], result, out var h);
@@ -468,9 +459,9 @@ public class RecastMeshProcessor : GameSystemBase
 
 	class AsyncInput
     {
-        public List<BasicMeshBuffers> shapeData = new();
-        public List<ShapeTransform> transformsOut = new();
-        public List<(Matrix entity, int count)> matrices = new();
+        public List<BasicMeshBuffers> shapeData = [];
+        public List<ShapeTransform> transformsOut = [];
+        public List<(Matrix entity, int count)> matrices = [];
     }
 
 }

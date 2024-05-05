@@ -8,13 +8,13 @@ using Stride.Games;
 using System.Collections.Concurrent;
 
 namespace Stride.BepuPhysics.Navigation.Processors;
-public class RecastNavigationProcessor : EntityProcessor<RecastNavigationComponent>
+public class RecastPhysicsNavigationProcessor : EntityProcessor<RecastPhysicsNavigationComponent>
 {
 	private RecastMeshProcessor? _recastMeshProcessor;
-	private List<RecastNavigationComponent> _components = new();
-	public readonly ConcurrentQueue<RecastNavigationComponent> TryGetPathQueue = new();
+	private List<RecastPhysicsNavigationComponent> _components = new();
+	public readonly ConcurrentQueue<RecastPhysicsNavigationComponent> TryGetPathQueue = new();
 
-	public RecastNavigationProcessor()
+	public RecastPhysicsNavigationProcessor()
 	{
 		//run after the RecastMeshProcessor
 		Order = 20001;
@@ -24,7 +24,7 @@ public class RecastNavigationProcessor : EntityProcessor<RecastNavigationCompone
 	{
 		ServicesHelper.LoadBepuServices(Services);
 		_recastMeshProcessor = Services.GetService<RecastMeshProcessor>();
-		if(_recastMeshProcessor is null)
+		if (_recastMeshProcessor is null)
 		{
 			// add the RecastMeshProcessor if it doesn't exist
 			_recastMeshProcessor = new RecastMeshProcessor(Services);
@@ -34,12 +34,12 @@ public class RecastNavigationProcessor : EntityProcessor<RecastNavigationCompone
 		}
 	}
 
-	protected override void OnEntityComponentAdding(Entity entity, RecastNavigationComponent component, RecastNavigationComponent data)
+	protected override void OnEntityComponentAdding(Entity entity, RecastPhysicsNavigationComponent component, RecastPhysicsNavigationComponent data)
 	{
 		_components.Add(component);
 	}
 
-	protected override void OnEntityComponentRemoved(Entity entity, RecastNavigationComponent component, RecastNavigationComponent data)
+	protected override void OnEntityComponentRemoved(Entity entity, RecastPhysicsNavigationComponent component, RecastPhysicsNavigationComponent data)
 	{
 		_components.Remove(component);
 	}
@@ -48,10 +48,10 @@ public class RecastNavigationProcessor : EntityProcessor<RecastNavigationCompone
 	{
 		var deltaTime = (float)time.Elapsed.TotalSeconds;
 
-		for(int i = 0; i < 10; i++)
+		for (int i = 0; i < 10; i++)
 		{
 			if (TryGetPathQueue.IsEmpty) break;
-		
+
 			if (TryGetPathQueue.TryDequeue(out var pathfinding))
 			{
 				// cannot use dispatcher here because of the TryFindPath method.
@@ -76,7 +76,7 @@ public class RecastNavigationProcessor : EntityProcessor<RecastNavigationCompone
 		});
 	}
 
-	private void SetNewPath(RecastNavigationComponent pathfinder)
+	private void SetNewPath(RecastPhysicsNavigationComponent pathfinder)
 	{
 		pathfinder.InSetPathQueue = false;
 		if (_recastMeshProcessor.TryFindPath(pathfinder.Entity.Transform.WorldMatrix.TranslationVector, pathfinder.Target, ref pathfinder.Polys, ref pathfinder.Path))
@@ -85,7 +85,7 @@ public class RecastNavigationProcessor : EntityProcessor<RecastNavigationCompone
 		}
 	}
 
-	private void Move(RecastNavigationComponent pathfinder, float deltaTime)
+	private void Move(RecastPhysicsNavigationComponent pathfinder, float deltaTime)
 	{
 		if (pathfinder.Path.Count == 0)
 		{
@@ -99,13 +99,13 @@ public class RecastNavigationProcessor : EntityProcessor<RecastNavigationCompone
 		var distanceToWaypoint = Vector3.Distance(position, nextWaypointPosition);
 
 		// When the distance between the character and the next waypoint is large enough, move closer to the waypoint
-		if (distanceToWaypoint > 0.1)
+		if (distanceToWaypoint > 0.5)
 		{
 			var direction = nextWaypointPosition - position;
 			direction.Normalize();
-			direction *= pathfinder.Speed * deltaTime;
+			//direction *= pathfinder.Speed;
 
-			position += direction;
+			pathfinder.PhysicsComponent.Move(direction);
 		}
 		else
 		{
@@ -115,11 +115,9 @@ public class RecastNavigationProcessor : EntityProcessor<RecastNavigationCompone
 				pathfinder.Path.RemoveAt(0);
 			}
 		}
-
-		pathfinder.Entity.Transform.Position = position;
 	}
 
-	public void Rotate(RecastNavigationComponent pathfinder)
+	public void Rotate(RecastPhysicsNavigationComponent pathfinder)
 	{
 		if (pathfinder.Path.Count == 0)
 		{
@@ -131,5 +129,6 @@ public class RecastNavigationProcessor : EntityProcessor<RecastNavigationCompone
 			pathfinder.Path[0].X - position.X);
 
 		pathfinder.Entity.Transform.Rotation = Quaternion.RotationY(-angle);
+		pathfinder.PhysicsComponent.Orientation = pathfinder.Entity.Transform.Rotation;
 	}
 }

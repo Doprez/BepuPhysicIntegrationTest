@@ -1,21 +1,24 @@
-﻿using DotRecast.Core.Numerics;
-using DotRecast.Detour;
-using Stride.BepuPhysics.Navigation.Definitions;
-using Stride.BepuPhysics.Navigation.Extensions;
+﻿using Stride.BepuPhysics.Navigation.Definitions;
 using Stride.BepuPhysics.Navigation.Processors;
 using Stride.Core;
 using Stride.Core.Mathematics;
 using Stride.Engine;
 using Stride.Engine.Design;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 
 namespace Stride.BepuPhysics.Navigation.Components;
-[DataContract(nameof(RecastNavigationComponent))]
+[DataContract(nameof(RecastPhysicsNavigationComponent))]
 [ComponentCategory("Bepu - Navigation")]
-[DefaultEntityComponentProcessor(typeof(RecastNavigationProcessor), ExecutionMode = ExecutionMode.Runtime)]
-public class RecastNavigationComponent : EntityComponent
+[DefaultEntityComponentProcessor(typeof(RecastPhysicsNavigationProcessor), ExecutionMode = ExecutionMode.Runtime)]
+public class RecastPhysicsNavigationComponent : EntityComponent
 {
 
 	public float Speed { get; set; } = 5.0f;
+	public CharacterComponent PhysicsComponent { get; set; }
 
 	/// <summary>
 	/// True if a new path needs to be calculated, can be manually changed to force a new path to be calculated.
