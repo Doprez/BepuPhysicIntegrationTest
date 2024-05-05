@@ -70,11 +70,6 @@ public class RecastMeshProcessor : GameSystemBase
             _navMesh = _runningRebuild.Result;
             _runningRebuild = null;
         }
-
-        if(_input.IsKeyPressed(Keys.Space))
-        {
-			RebuildNavMesh();
-		}
     }
 
     public Task RebuildNavMesh()
