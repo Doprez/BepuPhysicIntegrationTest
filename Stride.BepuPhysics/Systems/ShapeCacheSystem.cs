@@ -235,108 +235,79 @@ internal class ShapeCacheSystem
         }
 
         return triangles;
-    }
+	}
 
-    private static unsafe void ExtractMeshBuffers(Model model, Graphics.CommandList commandList, out VertexPosition3[] vertices, out int[] indices)
-    {
-#warning we probably don't handle all PrimitiveTypes.
-        int totalVertices = 0, totalIndices = 0;
-        foreach (var meshData in model.Meshes)
-        {
-            if (meshData.Draw.PrimitiveType == PrimitiveType.TriangleList)
-            {
-                totalVertices += meshData.Draw.VertexBuffers[0].Count;
-            }
-            else
-            {
-                totalIndices += meshData.Draw.IndexBuffer.Count;
-            }
-        }
+	private static unsafe void ExtractMeshBuffers(Model model, Graphics.CommandList commandList, out VertexPosition3[] vertices, out int[] indices)
+	{
+		int totalVertices = 0, totalIndices = 0;
+		foreach (var meshData in model.Meshes)
+		{
+			totalVertices += meshData.Draw.VertexBuffers[0].Count;
+			totalIndices += meshData.Draw.IndexBuffer.Count;
+		}
 
-        vertices = new VertexPosition3[totalVertices];
-        indices = new int[totalIndices];
+		vertices = new VertexPosition3[totalVertices];
+		indices = new int[totalIndices];
 
-        int vertexWriteHead = 0;
-        int indexWriteHead = 0;
-        foreach (var meshData in model.Meshes)
-        {
-            var vBuffer = meshData.Draw.VertexBuffers[0].Buffer;
-            byte[] verticesBytes = vBuffer.GetData<byte>(commandList);
+		int vertexWriteHead = 0;
+		int indexWriteHead = 0;
+		foreach (var meshData in model.Meshes)
+		{
+			var vBuffer = meshData.Draw.VertexBuffers[0].Buffer;
+			var iBuffer = meshData.Draw.IndexBuffer.Buffer;
+			byte[] verticesBytes = vBuffer.GetData<byte>(commandList);
+			byte[] indicesBytes = iBuffer.GetData<byte>(commandList);
 
-            if (meshData.Draw.PrimitiveType == PrimitiveType.TriangleList)
-            {
-                int vertMappingStart = vertexWriteHead;
-                fixed (byte* bytePtr = verticesBytes)
-                {
-                    var vBindings = meshData.Draw.VertexBuffers[0];
-                    int count = vBindings.Count;
-                    int stride = vBindings.Declaration.VertexStride;
+			if (verticesBytes == null || indicesBytes == null)
+				throw new InvalidOperationException($"Could not extract data from gpu for '{model}', maybe this model isn't uploaded to the gpu yet ?");
 
-                    for (int i = 0, vHead = vBindings.Offset; i < count; i++, vHead += stride)
-                    {
-                        vertices[vertexWriteHead++].Position = *(Vector3*)(bytePtr + vHead);
-                    }
-                } 
-                indices = Enumerable.Range(0, totalVertices / 3).ToArray();
-            }
-            else
-            {
-                var iBuffer = meshData.Draw.IndexBuffer.Buffer;
-                byte[] indicesBytes = iBuffer.GetData<byte>(commandList);
+			if (verticesBytes.Length == 0 || indicesBytes.Length == 0)
+			{
+				vertices = Array.Empty<VertexPosition3>();
+				indices = Array.Empty<int>();
+				return;
+			}
 
-                if (verticesBytes == null || indicesBytes == null)
-                    throw new InvalidOperationException($"Could not extract data from gpu for '{model}', maybe this model isn't uploaded to the gpu yet ?");
+			int vertMappingStart = vertexWriteHead;
+			fixed (byte* bytePtr = verticesBytes)
+			{
+				var vBindings = meshData.Draw.VertexBuffers[0];
+				int count = vBindings.Count;
+				int stride = vBindings.Declaration.VertexStride;
 
-                if (verticesBytes.Length == 0 || indicesBytes.Length == 0)
-                {
-                    vertices = Array.Empty<VertexPosition3>();
-                    indices = Array.Empty<int>();
-                    return;
-                }
+				for (int i = 0, vHead = vBindings.Offset; i < count; i++, vHead += stride)
+				{
+					vertices[vertexWriteHead++].Position = *(Vector3*)(bytePtr + vHead);
+				}
+			}
 
-                int vertMappingStart = vertexWriteHead;
-                fixed (byte* bytePtr = verticesBytes)
-                {
-                    var vBindings = meshData.Draw.VertexBuffers[0];
-                    int count = vBindings.Count;
-                    int stride = vBindings.Declaration.VertexStride;
+			fixed (byte* bytePtr = indicesBytes)
+			{
+				var count = meshData.Draw.IndexBuffer.Count;
 
-                    for (int i = 0, vHead = vBindings.Offset; i < count; i++, vHead += stride)
-                    {
-                        vertices[vertexWriteHead++].Position = *(Vector3*)(bytePtr + vHead);
-                    }
-                }
+				if (meshData.Draw.IndexBuffer.Is32Bit)
+				{
+					foreach (int indexBufferValue in new Span<int>(bytePtr + meshData.Draw.IndexBuffer.Offset, count))
+					{
+						indices[indexWriteHead++] = vertMappingStart + indexBufferValue;
+					}
+				}
+				else
+				{
+					foreach (ushort indexBufferValue in new Span<ushort>(bytePtr + meshData.Draw.IndexBuffer.Offset, count))
+					{
+						indices[indexWriteHead++] = vertMappingStart + indexBufferValue;
+					}
+				}
+			}
+		}
+	}
 
-                fixed (byte* bytePtr = indicesBytes)
-                {
-                    var count = meshData.Draw.IndexBuffer.Count;
-
-                    if (meshData.Draw.IndexBuffer.Is32Bit)
-                    {
-                        foreach (int indexBufferValue in new Span<int>(bytePtr + meshData.Draw.IndexBuffer.Offset, count))
-                        {
-                            indices[indexWriteHead++] = vertMappingStart + indexBufferValue;
-                        }
-                    }
-                    else
-                    {
-                        foreach (ushort indexBufferValue in new Span<ushort>(bytePtr + meshData.Draw.IndexBuffer.Offset, count))
-                        {
-                            indices[indexWriteHead++] = vertMappingStart + indexBufferValue;
-                        }
-                    }
-                }
-            }
-
-
-        }
-    }
-
-    /// <summary>
-    /// Matrices may not produce a valid local scale when decomposed into T,R,S; the basis of the matrix may be skewed/sheered depending on transformations
-    /// coming from parents, sheering is by definition not on the local basis
-    /// </summary>
-    internal static Vector3 GetClosestToDecomposableScale(Matrix matrix)
+	/// <summary>
+	/// Matrices may not produce a valid local scale when decomposed into T,R,S; the basis of the matrix may be skewed/sheered depending on transformations
+	/// coming from parents, sheering is by definition not on the local basis
+	/// </summary>
+	internal static Vector3 GetClosestToDecomposableScale(Matrix matrix)
     {
         float d1 = Vector3.Dot((Vector3)matrix.Row1, (Vector3)matrix.Row2);
         float d2 = Vector3.Dot((Vector3)matrix.Row2, (Vector3)matrix.Row3);
